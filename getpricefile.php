@@ -72,7 +72,7 @@ function getPrices() {
 			} else {
 				$writer->addRow($row); continue;							// если есть, то вставляем исходную строку
 			}
-			// if ($rowindex > 100) break;
+			// if ($rowindex > 500) break;
 		}
 	}
 	
@@ -138,7 +138,7 @@ function setGoodsProperties($session, $article, &$row) {
 	global $ini_array;
 
 	$res_array = makeRequest($article, $session, "");
-	if ($res_array === false) return false;
+	if ($res_array == false) return false;
 	if ($res_array["status"]["code"] == "200") {
 		$arrData = $res_array["data"];
 		$fields = $ini_array["GoodsFieldsMapping"];
@@ -180,7 +180,7 @@ function makeRequest($article, $session, $querytype) {
 	$source = $etm_array["source"];
 	if (($res = file_get_contents($source .'goods/'.$article. $querytype . '?type=mnf&session-id='.$session)) === false) {
 		$error = error_get_last();
-		//echo "HTTP-запрос $source не сработал. Ошибка: " . $error['message'];
+		echo "HTTP-запрос $source не сработал. Ошибка: " . $error['message'];
 		$res_array = false;
 	} else {
 		$res_array = json_decode($res, true);
@@ -224,9 +224,9 @@ function sendtoftp() {
 		
 		// ftp upload
 		if (ftp_put($ftpcon, $dst_file, $src_file))
-			echo 'File uploaded successfully to FTP server!';
+			echo '<br> Success! File uploaded successfully to FTP server!';
 		else
-			echo 'Error uploading file! Please try again later.';
+			echo '<br>Error uploading file! Please try again later.';
 		
 		// close ftp stream
 		ftp_close($ftpcon);
