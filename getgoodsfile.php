@@ -87,8 +87,6 @@ function getWeights() {
 	return 1;
 }	
 
-
-
 function setGoodsProperties($session, $article, &$row) {
 	global $ini_array;
 
