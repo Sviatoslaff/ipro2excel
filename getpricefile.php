@@ -3,7 +3,6 @@ ini_set('display_errors', 1); ini_set('display_startup_errors', 1); error_report
 set_time_limit(300); ini_set('max_execution_time', '300'); //300 seconds = 5 minutes
 
 require 'vendor/autoload.php';
-// require_once 'vendor/box/spout/src/Spout/Autoloader/autoload.php';
 use Box\Spout\Reader\Common\Creator\ReaderEntityFactory;
 use Box\Spout\Reader\Common\Creator\ReaderFactory;
 use Box\Spout\Common\Type;
@@ -17,6 +16,7 @@ if (!file_exists("config.ini")) {
 }
 $ini_array = parse_ini_file("config.ini", true);
 getPrices();
+sendtoftp();
 
 function getPrices() {
 	global $ini_array;
@@ -36,34 +36,43 @@ function getPrices() {
 	}
 	$reader = ReaderEntityFactory::createXLSXReader();
 	$reader = ReaderEntityFactory::createReaderFromFile($sourcefile);
-	// $reader->setShouldPreserveEmptyRows(true);
 	$reader->open($sourcefile);
 	$articleCol = $ini_array["PricesFileColumns"]["articleCol"];
 	$writer = WriterEntityFactory::createXLSXWriter();
 	$writer->setTempFolder($exp_array["tempfolder"]);
 	$writer->openToFile($xlsxname);
-
 	$notfound = array();
 	foreach ($reader->getSheetIterator() as $sheet) {
 		foreach ($sheet->getRowIterator() as $rowindex=>$row) {
-			if ($rowindex == 1) { $writer->addRow($row); continue;}
-			$article = $row->getCellAtIndex($articleCol)->getValue();
-			for ($i = 0; $i < 20; $i++) {
-				$myrow[] = $row->getCellAtIndex($i)->getValue();
+			if ($rowindex == 1) { $writer->addRow($row); continue;}			// первую строку просто копируем
+			if ($row->getCellAtIndex($articleCol) !== null)					// если артикул - не пустой
+				$article = $row->getCellAtIndex($articleCol)->getValue();
+			else
+				continue;													// просто пропускаем строку
+			$myrow = array();
+			for ($i = 0; $i < 12; $i++) {
+				$cell = $row->getCellAtIndex($i);
+				if ($cell !== null) 
+					$myrow[] = $row->getCellAtIndex($i)->getValue();
+				else
+					$myrow[] = "";				
 			}
-			if (strpos($article, " ") === false) {	// если нет пробелов
-				$status = setGoodsProperties($session, $article, $row);
+
+			if (strpos($article, " ") === false) {							// если нет пробелов в артикуле
+				$status = setGoodsProperties($session, $article, $myrow);
 				if ($status == "200") {
-					setPriceProperties($session, $article, $row);
-					setQuantityProperties($session, $article, $row);
+					 setPriceProperties($session, $article, $myrow);
+					 setQuantityProperties($session, $article, $myrow);
 				} else {
 					$notfound[] = $article;
 				}
-				$writer->addRow($row);
+				$rowFromValues = WriterEntityFactory::createRowFromArray($myrow);
+				// print_r($myrow);
+				$writer->addRow($rowFromValues);
 			} else {
-				$writer->addRow($row); continue;
+				$writer->addRow($row); continue;							// если есть, то вставляем исходную строку
 			}
-			if ($rowindex > 100) break;
+			// if ($rowindex > 100) break;
 		}
 	}
 	
@@ -80,7 +89,7 @@ function getPrices() {
 	return 1;
 }
 
-function setQuantityProperties($session, $article, $row) {
+function setQuantityProperties($session, $article, &$myrow) {
 	global $ini_array;
 
 	$res_array = makeRequest($article, $session, "/remains");	
@@ -88,24 +97,24 @@ function setQuantityProperties($session, $article, $row) {
 		$arrData = $res_array["data"]["InfoStores"];
 		$fields = $ini_array["QuantityFieldsMapping"];
 		foreach ($fields as $fieldnum => $field) {
-			$colindex = intval(substr($fieldnum, 6));		// for "columnX" take only X
+			$colindex = intval(substr($fieldnum, 6));						// for "columnX" take only X
 			if ($field == "StoreQuantRem") {		
 				foreach ($arrData as $store) {
 					switch ($store["StoreType"]) {
 						case "rc" :
-							$row->setCellAtIndex(WriterEntityFactory::createCell(intval($store[$field])), $colindex);
+							$myrow[$colindex] = intval($store[$field]);
 							break;
 					}
 				}
 			}
 		}
 	} else {
-		$row->setCellAtIndex(WriterEntityFactory::createCell($res_array["status"]["code"] . " " . $res_array["status"]["message"]), 9);
+		$myrow[9] = $res_array["status"]["code"] . " " . $res_array["status"]["message"];
 	}
 	return $res_array["status"]["code"] == "200";
 }
 
-function setPriceProperties($session, $article, $row) {
+function setPriceProperties($session, $article, &$myrow) {
 	global $ini_array;
 
 	$res_array = makeRequest($article, $session, "/price");	
@@ -113,14 +122,14 @@ function setPriceProperties($session, $article, $row) {
 		$arrData = $res_array["data"]["rows"][0];
 		$fields = $ini_array["PriceFieldsMapping"];
 		foreach ($fields as $fieldnum => $field) {
-			$colindex = intval(substr($fieldnum, 6));		// for "columnX" take only X
+			$colindex = intval(substr($fieldnum, 6));						// for "columnX" take only X
 			$arrKeys = explode(",", $field);
 			if (count($arrKeys) == 1) {				
-				$row->setCellAtIndex(WriterEntityFactory::createCell($arrData[$field]), $colindex);	
+				$myrow[$colindex] = $arrData[$field];
 			}	
 		}
 	} else {
-		$row->setCellAtIndex(WriterEntityFactory::createCell($res_array["status"]["code"] . " " . $res_array["status"]["message"]), 10);
+		$myrow[10] = $res_array["status"]["code"] . " " . $res_array["status"]["message"];
 	}
 	return $res_array["status"]["code"] == "200";
 }
@@ -136,21 +145,21 @@ function setGoodsProperties($session, $article, &$row) {
 		foreach ($fields as $fieldnum => $field) {
 			$colindex = intval(substr($fieldnum, 6));		// for "columnX" take only X
 			$arrKeys = explode(",", $field);
-			if (count($arrKeys) == 1) {				
-				$row->setCellAtIndex(WriterEntityFactory::createCell($arrData[$field]), $colindex);	
+			if (count($arrKeys) == 1) {	
+				$row[$colindex] = $arrData[$field];
 			} else {
 				if ($arrKeys[0] == "barcodes") {
 					if (array_key_exists('barcodes',$arrData))
-						$row->setCellAtIndex(WriterEntityFactory::createCell($arrData["barcodes"][0]["val"]), $colindex);	
+						$row[$colindex] = $arrData["barcodes"][0]["val"];
 				}
 				if ($arrKeys[0] == "color") {		
 					$arrMeas = $arrData["gdsChars"];
 					foreach ($arrMeas as $ch) {
 						switch ($ch["gdsCharName"]) {
 							case "Цвет корпуса" :
-								$row->setCellAtIndex(WriterEntityFactory::createCell($ch["gdsCharVal"]), $colindex);	
+								$row[$colindex] = $ch["gdsCharVal"];
 								break;
-							}
+						}
 					}
 				}
 
@@ -158,9 +167,9 @@ function setGoodsProperties($session, $article, &$row) {
 		}
 
 	} else {
-		$row->setCellAtIndex(WriterEntityFactory::createCell($res_array["status"]["code"] . " " . $res_array["status"]["message"]), 1);	
+		$row[0] = $res_array["status"]["code"] . " " . $res_array["status"]["message"];
 	}
-	return $res_array["status"]["code"] == "200";
+	return $res_array["status"]["code"];
 }
 
 
@@ -181,44 +190,46 @@ function makeRequest($article, $session, $querytype) {
 }
 
 function getsession($etm_array) {
-
-// Create a client with a base URI
-//	$client = new Client(["base_uri" => $etm_array["source"]]);
-//	$response = $client->request('POST', 'user/login?log='.$etm_array["login"].'&pwd='.$etm_array["password"]);
-//	try {
-//		$response = $client->request('POST', 'user/login?log=ingstroysnab2&pwd=pahj9808');
-//	} catch (\GuzzleHttp\Exception\BadResponseException $e) {
-//		return $e->getResponse()->getBody()->getContents();
-//	}
 	$res = file_get_contents($etm_array["source"] . 'user/login?log='.$etm_array["login"] . '&pwd='. $etm_array["password"]);
 	$res_array = json_decode($res, true);
 	$session = $res_array["data"]["session"];
-	//$code = $response->getStatusCode(); // 200
-//	$reason = $response->getReasonPhrase(); // OK
-
 	return $session;
 }
 
-function reserve() {
-/*	
-	$sheet->setCellValue('A1', 'Внешний Id');
-	$sheet->setCellValue('B1', 'Название');
-	$sheet->setCellValue('C1', 'Категория');
-	$sheet->setCellValue('D1', 'Родительская категория');
-	$sheet->setCellValue('E1', 'Производитель');
-	$sheet->setCellValue('F1', 'Артикул');
-	$sheet->setCellValue('G1', 'Цвет');
-	$sheet->setCellValue('H1', 'EAN');
-	$sheet->setCellValue('I1', 'Внешний Id');
-	$sheet->setCellValue('J1', 'Внешний Id');
-	$sheet->setCellValue('K1', 'Внешний Id');
-	$sheet->setCellValue('L1', 'Внешний Id');
-	$sheet->setCellValue('M1', 'Внешний Id');
-	$sheet->setCellValue('N1', 'Вес');
-	$sheet->setCellValue('O1', 'Длина');
-	$sheet->setCellValue('P1', 'Ширина');
-	$sheet->setCellValue('Q1', 'Высота');
-*/
-}
+function sendtoftp() {
+	global $ini_array;
+	// ftp settings
+	$ftp_array = $ini_array["FTP"];
+	$ftp_hostname = $ftp_array["destination"];
+	$ftp_port = $ftp_array["port"];
+	$ftp_username = $ftp_array["login"];
+	$ftp_password = $ftp_array["password"];
+	$remote_dir = $ftp_array["folder"];
+	$exp_array = $ini_array["Exporter"];
+	$src_file = $exp_array["tempfolder"] . "/" . $exp_array["xlsxpricesfilename"];
+	$dest_file = $exp_array["xlsxpricesfilename"];
 
+	//upload file
+	if ($src_file!='')
+	{
+		// remote file path
+		$dst_file = $remote_dir . $dest_file;
+		
+		// connect ftp
+		$ftpcon = ftp_ssl_connect($ftp_hostname, $ftp_port) or die('<br>Error connecting to ftp server...');
+		
+		// ftp login
+		$ftplogin = ftp_login($ftpcon, $ftp_username, $ftp_password) or die('<br>Error logging on to ftp server...');
+		ftp_pasv($ftpcon, true);
+		
+		// ftp upload
+		if (ftp_put($ftpcon, $dst_file, $src_file))
+			echo 'File uploaded successfully to FTP server!';
+		else
+			echo 'Error uploading file! Please try again later.';
+		
+		// close ftp stream
+		ftp_close($ftpcon);
+	}	
+}
 ?>
