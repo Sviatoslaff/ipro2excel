@@ -115,7 +115,7 @@ function setGoodsProperties($session, $article, &$row) {
 					$row[14] = floatval($ch["gdsCharVal"]);
 					break;
 				case "Цвет корпуса" :
-					$row[6] =  floatval($ch["gdsCharVal"]);
+					$row[6] =  $ch["gdsCharVal"];
 					break;
 			}
 		}
