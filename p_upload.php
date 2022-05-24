@@ -10,7 +10,7 @@ $exp_array = $ini_array["Exporter"];
 $etm_array = $ini_array["ETM"]; 
 
 $in_array = $ini_array["In"]; 
-$sourcefile = $exp_array["sourcefolder"] . "/" . $in_array["goodssourcefile"];
+$sourcefile = $exp_array["sourcefolder"] . "/" . $in_array["xlsxsourcefile"];
 
 // Название <input type="file">
 $input_name = 'goodsfile';
