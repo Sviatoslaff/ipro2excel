@@ -29,7 +29,7 @@ function getPrices() {
 	$session = getsession($etm_array);
 
 	$in_array = $ini_array["In"]; 
-	$sourcefile = $exp_array["tempfolder"] . "/" . $in_array["xlsxsourcefile"];
+	$sourcefile = $exp_array["sourcefolder"] . "/" . $in_array["xlsxsourcefile"];
 
 	if (!file_exists($sourcefile)) {
 		die("<br>Не обнаружен исходный файл $sourcefile -- работа невозможна.");
