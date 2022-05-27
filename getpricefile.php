@@ -28,6 +28,9 @@ function getPrices() {
 	$etm_array = $ini_array["ETM"]; 
 	$session = getsession($etm_array);
 
+	if ($session === false)
+		die("<br>Сессия не установлена. Проверьте логин в config.ini файле.");
+
 	$in_array = $ini_array["In"]; 
 	$sourcefile = $exp_array["sourcefolder"] . "/" . $in_array["xlsxsourcefile"];
 
@@ -192,7 +195,11 @@ function makeRequest($article, $session, $querytype) {
 function getsession($etm_array) {
 	$res = file_get_contents($etm_array["source"] . 'user/login?log='.$etm_array["login"] . '&pwd='. $etm_array["password"]);
 	$res_array = json_decode($res, true);
-	$session = $res_array["data"]["session"];
+	if ($res_array["status"]["code"] == "200") {
+		$session = $res_array["data"]["session"];
+	} else {
+		$session = false;
+	}	
 	return $session;
 }
 
