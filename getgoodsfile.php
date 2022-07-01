@@ -9,9 +9,10 @@ use Box\Spout\Common\Type;
 use Box\Spout\Writer\Common\Creator\WriterEntityFactory;
 use Box\Spout\Common\Entity\Row;
 
-$groupChars = array(); 												// словарь характеристик по группам (классам)
-// [XXXX классиф. товара][индекс] = характеристика
+//$groupChars = array(); 											// словарь характеристик по группам (классам)
+																	// [XXXX классиф. товара][индекс] = характеристика
 $mainChars = array_fill(0, 20, "reserve");							// плоский словарь характеристик [index] = характеристика
+
 $articleCol = 5;
 $resArray = array();												// результирующий массив
 
@@ -27,12 +28,18 @@ function makeArrays($session, $sourcefile) {
 	$reader = ReaderEntityFactory::createXLSXReader();
 	$reader = ReaderEntityFactory::createReaderFromFile($sourcefile);
 	$reader->open($sourcefile);
-
+	$mainChars[13] = "Масса, кг";
+	$mainChars[14] = "Длина, мм";
+	$mainChars[15] = "Ширина, мм";
+	$mainChars[16] = "Высота, мм";
+	$mainChars[17] = "Изображение 1";
+	$mainChars[18] = "Изображение 2";
+	$mainChars[19] = "Изображение 3";
 
 	foreach ($reader->getSheetIterator() as $sheet) {
 		foreach ($sheet->getRowIterator() as $rowindex=>$row) {
 			if ($rowindex == 1) { 											// первую строку просто копируем
-				for ($i = 0; $i < 18; $i++) {
+				for ($i = 0; $i < 12; $i++) {
 					$cell = $row->getCellAtIndex($i);
 					if ($cell !== null) 
 						$mainChars[$i] = $row->getCellAtIndex($i)->getValue();
@@ -91,12 +98,8 @@ function makeExcelfile() {
 	makeArrays($session, $sourcefile);
 
 	// создаем массив с доп.характеристиками
-	foreach ($groupChars as $groupitem) {
-		foreach ($groupitem as $char) {
-			$mainChars[] = $char;
-		}
-	}
 	$qrows = count($mainChars);
+//var_dump($mainChars);
 
 	$writer = WriterEntityFactory::createXLSXWriter();
 	$writer->setTempFolder($exp_array["tempfolder"]);
@@ -107,25 +110,39 @@ function makeExcelfile() {
 	$rowFromValues = WriterEntityFactory::createRowFromArray($mainChars);
 	$writer->addRow($rowFromValues);
 
-	foreach ($resArray as $item) {
+	foreach ($resArray as $rowindex=>$item) {
 		$myrow = array_fill(0, $qrows, "");
-		for ($i = 0; $i < 18; $i++) {
+		for ($i = 0; $i < 16; $i++) {
 			$myrow[$i] = $item[$i];
 		}
 		foreach ($item["Chars"] as $char) {
-			if (in_array($char[""], $mainChars)) {
+			if (in_array($char["gdsCharName"], $mainChars)) {
 				$key = array_search($char["gdsCharName"], $mainChars);
 				$myrow[$key] = $char["gdsCharVal"];
-			}
+				if (is_numeric($char["gdsCharVal"])) {
+					if (is_float($char["gdsCharVal"]))
+						$myrow[$key] = floatval($char["gdsCharVal"]);
+					if (is_int($char["gdsCharVal"]))
+						$myrow[$key] = intval($char["gdsCharVal"]);
+				}
+			}			
 		}
+		$rowImg = 17;
+		foreach ($item["Img"] as $img) {
+			$myrow[$rowImg] =  "https://cdn.etm.ru" . $img["gdsImgSrc"]; 
+			$rowImg = $rowImg + 1;
+			if ($rowImg > 19) break;
+		}
+
 		$rowFromValues = WriterEntityFactory::createRowFromArray($myrow);
 		$writer->addRow($rowFromValues);
+//var_dump($myrow);		
 	}
 	$writer->close();
 
 	$time2 = date("d-m-Y H:i:s");
 	echo "Финиш $time2<br> ";
-	echo "Обработано позиций<br>";
+	echo "Обработано $rowindex позиций<br>";
 	$countnotfound = count($notfound);
 	echo "Не найдено $countnotfound позиций:<br>";
 	$show = implode(",", $notfound);
@@ -147,9 +164,6 @@ function setGoodsProperties($session, $article, &$row) {
 		$arrMeas = $arrData["gdsChars"];
 		foreach ($arrMeas as $ch) {
 			switch ($ch["gdsCharName"]) {
-				case "Высота, мм" :
-					$row[16] =  floatval($ch["gdsCharVal"]);
-					break;
 				case "Масса, кг" :
 					$row[13] =  floatval($ch["gdsCharVal"]);
 					break;
@@ -159,18 +173,21 @@ function setGoodsProperties($session, $article, &$row) {
 				case "Длина, мм" :
 					$row[14] = floatval($ch["gdsCharVal"]);
 					break;
+				case "Высота, мм" :
+					$row[16] =  floatval($ch["gdsCharVal"]);
+					break;
 				case "Цвет корпуса" :
 					$row[6] =  $ch["gdsCharVal"];
 					break;
 			}
 		}
-
-		if (!array_key_exists($class, $groupChars)) {
-			foreach ($arrMeas as $ch) {
-				$groupChars[$class] = $ch["gdsCharName"];
-				$row["Chars"][] = $ch;
+		foreach ($arrMeas as $ch) {
+			if (!in_array($ch["gdsCharName"], $mainChars)) {
+				$mainChars[] = $ch["gdsCharName"];
 			}
+			$row["Chars"][] = $ch;
 		}
+		$row["Img"] = $arrData["gdsImages"];
 
 	} else {
 		$row[0] = $res_array["status"]["code"] . " " . $res_array["status"]["message"];
