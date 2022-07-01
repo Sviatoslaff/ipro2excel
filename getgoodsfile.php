@@ -71,7 +71,7 @@ function makeArrays($session, $sourcefile) {
 			} else {
 												// если есть пробелы, то возвращаем исходную строку
 			}
-			 if ($rowindex > 100) break;
+			// if ($rowindex > 100) break;
 		}
 	}
 	$reader->close();
