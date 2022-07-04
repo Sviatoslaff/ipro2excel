@@ -28,6 +28,7 @@ function makeArrays($session, $sourcefile) {
 	$reader = ReaderEntityFactory::createXLSXReader();
 	$reader = ReaderEntityFactory::createReaderFromFile($sourcefile);
 	$reader->open($sourcefile);
+	$mainChars[12] = "Страна изготовления";
 	$mainChars[13] = "Масса, кг";
 	$mainChars[14] = "Длина, мм";
 	$mainChars[15] = "Ширина, мм";
@@ -162,6 +163,7 @@ function setGoodsProperties($session, $article, &$row) {
 		if (array_key_exists('barcodes',$arrData))
 			$row[7] = strval($arrData["barcodes"][0]["val"]);
 		$arrMeas = $arrData["gdsChars"];
+		$row[12] = $arrData["gdsNameCountry"];
 		foreach ($arrMeas as $ch) {
 			switch ($ch["gdsCharName"]) {
 				case "Масса, кг" :
